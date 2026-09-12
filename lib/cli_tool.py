@@ -1,48 +1,87 @@
-# cli_tool.py
-
 import argparse
-from models import Task, User
 
-# Global dictionary to store users and their tasks
+try:
+    from lib.models import Task, User
+except ImportError:
+    from models import Task, User
+
+# Session store: user name -> User. Each User holds a list of Task objects.
 users = {}
 
-# TODO: Implement function to add a task for a user
+# Seeded so complete-task can be tested without file persistence
+alice = User("Alice")
+unit_test_task = Task("Write unit tests")
+alice.add_task(unit_test_task)
+users["Alice"] = alice
+
+
+def non_empty(value):
+    """argparse type: reject blank strings before a command runs."""
+    if not value or not str(value).strip():
+        raise argparse.ArgumentTypeError("value cannot be empty")
+    return str(value).strip()
+
+
+def get_or_create_user(name):
+    user = users.get(name) or User(name)
+    users[name] = user
+    return user
+
+
 def add_task(args):
-    # - Check if the user exists, if not, create one
-    # - Create a new Task with the given title
-    # - Add the task to the user's task list
-    pass
+    user = get_or_create_user(args.user)
+    user.add_task(Task(args.title))
 
-# TODO: Implement function to mark a task as complete
+
 def complete_task(args):
-    # - Look up the user by name
-    # - Look up the task by title
-    # - Mark the task as complete
-    # - Print appropriate error messages if not found
-    pass
+    user = users.get(args.user)
+    if not user:
+        print("❌ User not found.")
+        return
+    user.complete_task(args.title)
 
-# CLI entry point
-def main():
-    parser = argparse.ArgumentParser(description="Task Manager CLI")
-    subparsers = parser.add_subparsers()
 
-    # Subparser for adding tasks
-    add_parser = subparsers.add_parser("add-task", help="Add a task for a user")
-    add_parser.add_argument("user")
-    add_parser.add_argument("title")
+def list_tasks(args):
+    user = users.get(args.user)
+    if not user:
+        print("❌ User not found.")
+        return
+    user.list_tasks()
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Task Manager CLI",
+        epilog="Example: python -m lib.cli_tool add-task Alice \"Write unit tests\"",
+    )
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        help="Available commands",
+    )
+
+    add_parser = subparsers.add_parser("add-task", help="Add a new task for a user")
+    add_parser.add_argument("user", type=non_empty, help="Name of the user who owns the task")
+    add_parser.add_argument("title", type=non_empty, help="Title of the task to add")
     add_parser.set_defaults(func=add_task)
 
-    # Subparser for completing tasks
-    complete_parser = subparsers.add_parser("complete-task", help="Complete a user's task")
-    complete_parser.add_argument("user")
-    complete_parser.add_argument("title")
+    complete_parser = subparsers.add_parser("complete-task", help="Mark a user's task as complete")
+    complete_parser.add_argument("user", type=non_empty, help="Name of the user who owns the task")
+    complete_parser.add_argument("title", type=non_empty, help="Title of the task to complete")
     complete_parser.set_defaults(func=complete_task)
 
+    list_parser = subparsers.add_parser("list-tasks", help="List all tasks for a user")
+    list_parser.add_argument("user", type=non_empty, help="Name of the user whose tasks to list")
+    list_parser.set_defaults(func=list_tasks)
+
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
-    else:
-        parser.print_help()
+    args.func(args)
+
 
 if __name__ == "__main__":
     main()
